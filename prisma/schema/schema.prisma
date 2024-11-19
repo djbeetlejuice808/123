@@ -1,0 +1,746 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["prismaSchemaFolder"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MeasurementUnit {
+  GRAM       
+  KILOGRAM   
+  CENTIMETER 
+  METER      
+}
+
+enum UserType {
+  SELLER
+  CUSTOMER
+  ADMIN
+}
+
+enum UserStatus {
+  AVAILABLE
+  UNAVAILABLE
+  BLOCKED
+}
+
+enum SellerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum EmailVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum OrderStatus {
+  PENDING             // Mới đặt hàng
+  SELLER_CONFIRMED    // Seller đã xác nhận
+  SELLER_REJECTED     // Seller từ chối
+  SHIPPING            // Đang giao hàng
+  DELIVERED           // Đã giao hàng
+  CANCELLED           // Đã hủy
+  COMPLETED           // Hoàn thành
+}
+
+enum ShippingProviderStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum WarehouseStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum InventoryStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
+enum MovementType {
+  IMPORT    // Nhập kho
+  EXPORT    // Xuất kho
+}
+
+enum MovementStatus {
+  PENDING   // Chờ duyệt
+  APPROVED  // Đã duyệt
+  COMPLETED // Hoàn thành
+  CANCELLED // Đã hủy
+}
+
+enum AlertType {
+  LOW_STOCK   // Cảnh báo hàng tồn thấp
+  OVERSTOCK   // Cảnh báo vượt tồn kho tối đa
+}
+
+enum ReportType {
+  DAILY
+  MONTHLY 
+  QUARTERLY
+  YEARLY
+}
+
+enum SourceType {
+  PURCHASE_ORDER
+  SALES_ORDER
+  TRANSFER
+  ADJUSTMENT
+  OTHER
+}
+
+model Category {
+  id                 Int       @id @default(autoincrement())
+  name               String    @db.VarChar(100)
+  description        String?
+  parentCategoryId   Int?
+  level              Int?
+  path               String?   @db.VarChar(100)
+  slug               String?   @db.VarChar(100) @unique
+  status             String    @default("available")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+  parentCategory     Category? @relation("CategoryToCategory", fields: [parentCategoryId], references: [id])
+  childCategories    Category[] @relation("CategoryToCategory")
+  attributes         CategoryAttribute[]
+  products           Product[]
+
+  @@map("categories")
+}
+
+model CategoryAttribute {
+  id         Int       @id @default(autoincrement())
+  categoryId Int      
+  name       String    @db.VarChar(50)
+  value      Json
+  formName   String?   @db.VarChar(20)
+  formType   String?   @db.VarChar(20)
+  slug       String?   @db.VarChar(100)
+  require    Boolean   @default(false)
+  status     String    @default("available")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  category   Category  @relation(fields: [categoryId], references: [id])
+  attributeValues AttributeValue[]
+  @@map("category_attributes")
+}
+
+model AttributeValue {
+  id                        Int       @id @default(autoincrement())
+  categoryAttributeValueId  Int
+  value                     Json
+  status                    String    @default("available")
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
+  attribute                 CategoryAttribute @relation(fields: [categoryAttributeValueId], references: [id])
+  productAttributeValues    ProductAttributeValue[]
+  @@map("attribute_values")
+}
+
+model ProductAttributeValue {
+  productId               Int
+  attributeValueId        Int
+  status                  String    @default("available")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  product                 Product   @relation(fields: [productId], references: [id])
+  attributeValue          AttributeValue @relation(fields: [attributeValueId], references: [id])
+  @@id([productId, attributeValueId])
+  @@map("product_attribute_values")
+}
+
+model Product {
+  id                      Int       @id @default(autoincrement())
+  name                    String    @db.VarChar(200)
+  categoryId              Int
+  sellerId                Int
+  shortDescription        String?   @db.VarChar(200)
+  longDescription         String?   @db.Text()
+  hasClassification       Boolean   @default(false)
+  slug                    String?   @db.VarChar(100)
+  weight                  Float     @default(5) 
+  length                  Float     @default(10) 
+  width                   Float     @default(10) 
+  height                  Float     @default(10) 
+  weightUnit              MeasurementUnit @default(GRAM)
+  sizeUnit                MeasurementUnit @default(CENTIMETER)
+  status                  String    @default("available")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  category                Category  @relation(fields: [categoryId], references: [id])
+  seller                  User      @relation(fields: [sellerId], references: [id])
+  ProductAttributeValue   ProductAttributeValue[]
+  classificationGroups    ClassificationGroup[]
+  classifications         ProductClassification[] 
+  orderItems              OrderItem[]
+  preOrders               PreOrder[]
+  images                  Image[]
+  inventory Inventory[]
+  @@map("products")
+}
+
+model ClassificationGroup {
+  id                      Int       @id @default(autoincrement())
+  productId               Int
+  name                    String    @db.VarChar(50)
+  status                  String    @default("available")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  product                 Product   @relation(fields: [productId], references: [id])
+  options                 ClassificationOption[]
+
+  @@map("classification_groups")
+}
+
+model ClassificationOption {
+  id                      Int       @id @default(autoincrement())
+  groupId                 Int
+  name                    String    @db.VarChar(50)
+  status                  String    @default("available")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  group                   ClassificationGroup @relation(fields: [groupId], references: [id])
+  option1Classifications  ProductClassification[] @relation("Option1")
+  option2Classifications  ProductClassification[] @relation("Option2")
+
+  @@map("classification_options")
+}
+
+model ProductClassification {
+  id                      Int       @id @default(autoincrement())
+  productId               Int
+  option1Id               Int
+  option2Id               Int?
+  price                   Decimal   @db.Decimal(10, 2)
+  stock                   Int
+  status                  String    @default("available")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  product                 Product   @relation(fields: [productId], references: [id])
+  option1                 ClassificationOption @relation("Option1", fields: [option1Id], references: [id])
+  option2                 ClassificationOption? @relation("Option2", fields: [option2Id], references: [id])
+  cart                    Cart[]
+  orderItems              OrderItem[]
+  preOrders               PreOrder[]
+  inventory Inventory[]
+  @@map("product_classifications")
+}
+
+model Warehouse {
+  id              Int       @id @default(autoincrement())
+  sellerId        Int       
+  name            String    @db.VarChar(100)
+  code            String    @unique @db.VarChar(50)  
+  address         String?   @db.VarChar(255)
+  provinceId      Int
+  districtId      Int 
+  wardId          Int
+  status          WarehouseStatus @default(ACTIVE)
+  description     String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  seller          Seller      @relation(fields: [sellerId], references: [id]) 
+  province        Province    @relation(fields: [provinceId], references: [id])
+  district        District    @relation(fields: [districtId], references: [id])
+  ward            Ward        @relation(fields: [wardId], references: [id])
+  inventory       Inventory[]
+  stockMovements  StockMovement[]
+
+  
+  @@map("warehouses")
+}
+
+// Model tồn kho
+model Inventory {
+  id                Int       @id @default(autoincrement())
+  warehouseId       Int
+  productId         Int
+  classificationId  Int?     
+  quantity          Int      
+  minQuantity       Int      
+  maxQuantity       Int      
+  status            InventoryStatus @default(ACTIVE)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  alerts            InventoryAlert[]
+  stockMovementItems StockMovementItem[]
+
+  // Relations
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
+  product         Product   @relation(fields: [productId], references: [id])
+  classification  ProductClassification? @relation(fields: [classificationId], references: [id])
+  stockMovements  StockMovement[] @relation("InventoryToStockMovement") // Chỉ giữ 1 định nghĩa relation
+
+  @@unique([warehouseId, productId, classificationId])
+  @@map("inventory")
+}
+
+// Model phiếu nhập/xuất kho
+model StockMovement {
+  id              Int              @id @default(autoincrement())
+  warehouseId     Int
+  type            MovementType  
+  status          MovementStatus  @default(PENDING)
+  note            String?         @db.Text
+  createdBy       Int      
+  approvedBy      Int?     
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  completedAt     DateTime?
+  inventoryId     Int      // Bỏ optional
+
+  // Relations
+  inventory       Inventory @relation("InventoryToStockMovement", fields: [inventoryId], references: [id])
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
+  creator         User      @relation("CreatedMovements", fields: [createdBy], references: [id])
+  approver        User?     @relation("ApprovedMovements", fields: [approvedBy], references: [id])
+  items           StockMovementItem[]
+
+  @@map("stock_movements") 
+}
+
+// Chi tiết phiếu nhập/xuất
+model StockMovementItem {
+  id              Int       @id @default(autoincrement())
+  movementId      Int
+  inventoryId     Int
+  quantity        Int      // Số lượng nhập/xuất
+  note            String?   @db.Text
+  
+  // Relations
+  movement        StockMovement @relation(fields: [movementId], references: [id])
+  inventory       Inventory @relation(fields: [inventoryId], references: [id])
+
+  @@map("stock_movement_items")
+}
+
+// Model cảnh báo tồn kho
+model InventoryAlert {
+  id              Int       @id @default(autoincrement())
+  inventoryId     Int
+  type            AlertType // LOW_STOCK/OVERSTOCK
+  message         String    @db.Text
+  isRead          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  readAt          DateTime?
+
+  // Relations  
+  inventory       Inventory @relation(fields: [inventoryId], references: [id])
+
+  @@map("inventory_alerts")
+}
+
+model User {
+  userType                UserType   @default(CUSTOMER)
+  status                  UserStatus @default(AVAILABLE)
+  id                      Int        @id @default(autoincrement())
+  username                String     @unique @db.VarChar(50)
+  passwordIterations      Int        @default(10000)  
+  passwordSalt            String     @db.VarChar(255)
+  passwordHash            String     @db.VarChar(255)
+  avatar                  String?      
+  email                   String?    @unique @db.VarChar(100)
+  fullName                String?    @db.VarChar(100)
+  phone                   String? 
+  emailVerified           Boolean    @default(false) 
+  emailVerificationStatus EmailVerificationStatus @default(PENDING)
+  otp                     String?    @db.VarChar(4)   
+  createdAt               DateTime   @default(now())
+  otpExpires              DateTime?     
+  updatedAt               DateTime?  @updatedAt
+  deletedAt               DateTime?
+  products                Product[]
+  cart                    Cart[]
+  orders                  Order[]
+  preOrders               PreOrder[]
+  notifications           Notification[]
+  seller                  Seller?    
+  sessions                Session[]
+  addresses               Address[]
+  sellerOrders            Order[] @relation("SellerOrders")
+  orderStatusHistories    OrderStatusHistory[]
+  createdMovements        StockMovement[] @relation("CreatedMovements")
+  approvedMovements       StockMovement[] @relation("ApprovedMovements")
+  paymentMethods          PaymentMethod[]
+  @@map("users")
+}
+
+
+
+model Seller {
+  id                      Int        @id @default(autoincrement())
+  userId                  Int        @unique        
+  storeName               String     @db.VarChar(100)
+  pickupAddress           String     @db.VarChar(255)
+  email                   String     @unique @db.VarChar(100)
+  shippingSettings        Json?
+  taxInformation          Json?
+  identificationCode      String?    @db.VarChar(50)
+  businessLicense         String?
+  approvedAt              DateTime?
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime?  @updatedAt
+  deletedAt               DateTime?
+  addresses               Address[]
+  status                  SellerStatus @default(PENDING)
+  user                    User       @relation(fields: [userId], references: [id])
+  shippingConfigs         SellerShippingConfig[]
+  warehouses              Warehouse[]
+  @@map("sellers")
+}
+
+model ShippingProvider {
+  id                    Int       @id @default(autoincrement())
+  name                  String    @db.VarChar(100)
+  code                  String    @unique @db.VarChar(50)  // Mã định danh của đơn vị vận chuyển
+  website               String?   @db.VarChar(255)
+  apiEndpoint           String    @db.VarChar(255)
+  description           String?   @db.Text
+  policies              String?   @db.Text  // Chính sách kiểm tra hàng
+  status                ShippingProviderStatus @default(ACTIVE)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  deletedAt             DateTime?
+  sellerShippingConfigs SellerShippingConfig[]
+
+  @@map("shipping_providers")
+}
+
+// Model cho cấu hình vận chuyển của seller
+model SellerShippingConfig {
+  id                  Int       @id @default(autoincrement())
+  sellerId            Int
+  shippingProviderId  Int
+  shopId              String    @db.VarChar(100)  // Shop ID của seller trên hệ thống vận chuyển
+  token               String    @db.Text          // Token xác thực với đơn vị vận chuyển
+  isDefault           Boolean   @default(false)   // Đặt làm đơn vị vận chuyển mặc định
+  status              String    @default("active")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+  seller              Seller    @relation(fields: [sellerId], references: [id])
+  shippingProvider    ShippingProvider @relation(fields: [shippingProviderId], references: [id])
+
+  @@unique([sellerId, shippingProviderId])
+  @@map("seller_shipping_configs")
+}
+
+model Session {
+  id                     Int   @id @default(autoincrement())
+  userId                 Int
+  user                   User     @relation(fields: [userId], references: [id])
+  refreshToken           String
+  expiresAt              DateTime
+  createdAt              DateTime @default(now())
+  @@map("sessions")
+}
+
+model Address {
+  id                      Int       @id @default(autoincrement())
+  addressDetail           String    @db.VarChar(255)
+  provinceId              Int
+  districtId              Int
+  wardId                  Int
+  userId                  Int?
+  sellerId                Int?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  province                Province  @relation(fields: [provinceId], references: [id])
+  district                District  @relation(fields: [districtId], references: [id])
+  ward                    Ward      @relation(fields: [wardId], references: [id])
+  user                    User?     @relation(fields: [userId], references: [id])
+  seller                  Seller?   @relation(fields: [sellerId], references: [id])
+  orders                  Order[]   @relation("ShippingAddress")
+  @@unique([userId, sellerId])
+  @@map("addresses")
+}
+
+model Province {
+  id                     Int        @id @default(autoincrement())
+  Type                   String?
+  Code                   String     @unique
+  Name                   String?
+  NameEn                 String?
+  FullName               String?
+  FullNameEn             String?
+  CodeName               String?
+  AdministrativeUnitId   Int?
+  AdministrativeRegionId Int?
+  districts              District[]
+  addresses              Address[]
+  warehouses Warehouse[]
+}
+
+model District {
+  id                      Int       @id @default(autoincrement())
+  Type                    String?
+  Code                    String    @unique
+  Name                    String?
+  NameEn                  String?
+  FullName                String?
+  FullNameEn              String?
+  CodeName                String?
+  ProvinceCode            String
+  AdministrativeUnitId    Int?
+  province                Province  @relation(fields: [ProvinceCode], references: [Code])
+  wards                   Ward[]
+  addresses               Address[]
+  warehouses Warehouse[]
+}
+
+model Ward {
+  id                      Int       @id @default(autoincrement())
+  Type                    String?
+  Code                    String    @unique
+  Name                    String?
+  NameEn                  String?
+  FullName                String?
+  FullNameEn              String?
+  CodeName                String?
+  DistrictCode            String
+  AdministrativeUnitId    Int?
+  district                District  @relation(fields: [DistrictCode], references: [Code])
+  addresses               Address[]
+  warehouses Warehouse[]
+}
+
+model Image {
+  id                      Int      @id @default(autoincrement())
+  productId               Int
+  name                    String 
+  path                    String
+  contentType             String
+  publicId                String
+  size                    Int
+  isThumbnail             Boolean
+  isEliminated            Boolean
+  product                 Product   @relation(fields: [productId], references: [id])
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  @@map("image_product")
+}
+
+model Cart {
+  id                 Int                    @id @default(autoincrement())
+  userId             Int                    
+  classificationId   Int?
+  quantity           Int                    @default(1)
+  status             String                 @default("available")
+  user               User                   @relation(fields: [userId], references: [id])
+  classification     ProductClassification? @relation(fields: [classificationId], references: [id])
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  deletedAt          DateTime?
+  @@map("carts")
+}
+
+model Order {
+  id                Int                 @id @default(autoincrement())
+  orderCode         String?             @unique
+  userId            Int
+  sellerId          Int   
+  shippingAddressId Int?
+  totalAmount       Decimal             @db.Decimal(10, 2)
+  sellerNote        String?          
+  shippingCode      String?          
+  shippingMethod    String?         
+  shippingFee       Decimal?            @db.Decimal(10, 2)
+  orderPrintUrl     String?             @db.Text()
+  createdBy         Int?              
+  confirmedAt       DateTime?        
+  orderDate         DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  deletedAt         DateTime?
+  user              User                @relation(fields: [userId], references: [id])
+  seller            User                @relation("SellerOrders", fields: [sellerId], references: [id])
+  status            OrderStatus         @default(PENDING)  // Đổi kiểu status
+  items             OrderItem[]
+  cancellation      OrderCancellation?
+  statusHistory     OrderStatusHistory[] // Thêm lịch sử trạng thái
+  payment           Payment?
+  shippingAddress   Address? @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
+  @@map("orders")
+}
+
+model OrderStatusHistory {
+  id              Int         @id @default(autoincrement())
+  orderId         Int
+  status          OrderStatus
+  note            String?
+  createdBy       Int         // ID của user tạo ra trạng thái (có thể là seller hoặc customer)
+  createdAt       DateTime    @default(now())
+  order           Order       @relation(fields: [orderId], references: [id])
+  user        User        @relation(fields: [createdBy], references: [id])
+
+  @@map("order_status_history")
+}
+
+model OrderItem {
+  id                 Int       @id @default(autoincrement())
+  orderId            Int
+  productId          Int
+  classificationId   Int?
+  quantity           Int
+  price              Decimal   @db.Decimal(10, 2)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+  order              Order     @relation(fields: [orderId], references: [id])
+  product            Product   @relation(fields: [productId], references: [id])
+  classification     ProductClassification? @relation(fields: [classificationId], references: [id])
+
+  @@map("order_items")
+}
+
+model PreOrder {
+  id                 Int       @id @default(autoincrement())
+  userId             Int
+  productId          Int
+  classificationId   Int?
+  quantity           Int
+  expectedDeliveryDate DateTime
+  status             String    @default("Pending")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+  user               User      @relation(fields: [userId], references: [id])
+  product            Product   @relation(fields: [productId], references: [id])
+  classification     ProductClassification? @relation(fields: [classificationId], references: [id])
+
+  @@map("pre_orders")
+}
+
+model OrderCancellation {
+  id           Int      @id @default(autoincrement())
+  orderId      Int      @unique
+  reason       String
+  cancelledAt  DateTime @default(now())
+  order        Order    @relation(fields: [orderId], references: [id])
+  
+  @@map("order_cancellations")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  message   String
+  isRead    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+enum PaymentStatus {
+  PENDING     // Chờ thanh toán
+  PROCESSING  // Đang xử lý
+  COMPLETED   // Hoàn thành
+  FAILED      // Thất bại
+  REFUNDED    // Hoàn tiền
+  CANCELLED   // Đã hủy
+}
+
+enum PaymentMethodType {
+  CASH_ON_DELIVERY  // Thanh toán khi nhận hàng
+  BANK_TRANSFER     // Chuyển khoản ngân hàng
+  // ... other payment methods
+}
+
+model PaymentMethod {
+  id            Int               @id @default(autoincrement())
+  userId        Int?
+  name          String            // Tên phương thức thanh toán
+  code          String            @unique     // Mã phương thức thanh toán
+  description   String?            // Mô tả
+  type          PaymentMethodType // Loại phương thức thanh toán
+  isActive      Boolean           @default(true) // Trạng thái hoạt động
+  config        Json?             // Cấu hình riêng cho từng phương thức (API keys, endpoints...)
+  
+  // Thông tin ngân hàng (chỉ dùng cho BANK_TRANSFER)
+  bankName      String?           // Tên ngân hàng
+  bankBranch    String?           // Chi nhánh
+  accountNumber String?           // Số tài khoản
+  accountName   String?           // Tên chủ tài khoản
+  swiftCode     String?           // Mã Swift/BIC
+  
+  // Timestamps
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  user            User?             @relation(fields: [userId], references: [id])
+  payments        Payment[]
+
+  @@map("payment_methods")
+}
+
+model Payment {
+  id                Int               @id @default(autoincrement())
+  orderId           Int               @unique // Liên kết 1-1 với Order
+  amount            Decimal           @db.Decimal(10,2)
+  paymentMethodId   Int
+  status            PaymentStatus     @default(PENDING)
+  
+  // Thông tin thanh toán bổ sung
+  paymentCode       String?           @unique // Mã thanh toán unique
+  paymentUrl        String?           // URL thanh toán (cho các cổng thanh toán)
+  paymentTime       DateTime?         // Thời gian thanh toán
+  
+  // Relations
+  order             Order             @relation(fields: [orderId], references: [id])
+  paymentMethod     PaymentMethod     @relation(fields: [paymentMethodId], references: [id])
+  transactions      PaymentTransaction[]
+
+  // Timestamps
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+
+  @@map("payments")
+}
+
+// Model lưu lịch sử giao dịch thanh toán
+model PaymentTransaction {
+  id              Int       @id @default(autoincrement())
+  paymentId       Int
+  amount          Decimal   @db.Decimal(10,2)
+  status          PaymentStatus
+  note            String?   @db.Text
+  createdAt       DateTime  @default(now())
+  
+  payment         Payment   @relation(fields: [paymentId], references: [id])
+
+  @@map("payment_transactions")
+}
+
+
+
+
+
